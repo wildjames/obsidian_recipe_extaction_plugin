@@ -1,0 +1,77 @@
+name: Release version guard
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+jobs:
+  verify-next-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Determine release type
+        id: release_type
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const sha = context.sha;
+            let isDependabot = false;
+            let isMajor = false;
+
+            const pullRequest = context.payload?.pull_request;
+            if (pullRequest) {
+              isDependabot = pullRequest.user?.login === "dependabot[bot]";
+              isMajor = pullRequest.title?.startsWith("Major: ");
+            }
+
+            if (!pullRequest) {
+              try {
+                const { data: pulls } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                  owner,
+                  repo,
+                  commit_sha: sha
+                });
+
+                if (Array.isArray(pulls) && pulls.length) {
+                  isDependabot = pulls.some((pr) => pr.user?.login === "dependabot[bot]");
+                  isMajor = pulls.some((pr) => pr.title?.startsWith("Major: "));
+                }
+              } catch (error) {
+                core.warning(`Failed to look up PRs for ${sha}: ${error.message}`);
+              }
+            }
+
+            const fallbackActor = context.payload?.pusher?.name || context.payload?.sender?.login;
+            if (!isDependabot && fallbackActor === "dependabot[bot]") {
+              isDependabot = true;
+            }
+
+            let releaseType = "minor";
+            if (isMajor) {
+              releaseType = "major";
+            } else if (isDependabot) {
+              releaseType = "patch";
+            }
+
+            core.setOutput("type", releaseType);
+
+      - name: Compute next version
+        id: next_version
+        run: echo "version=$(node scripts/bump-version.mjs --type ${{ steps.release_type.outputs.type }} --dry-run)" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure version is not already released
+        run: |
+          if git rev-parse -q --verify "refs/tags/${{ steps.next_version.outputs.version }}" >/dev/null; then
+            echo "Tag already exists for version ${{ steps.next_version.outputs.version }}"
+            exit 1
+          fi

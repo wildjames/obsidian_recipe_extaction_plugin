@@ -1,0 +1,8 @@
+{
+  "id": "recipe-parser",
+  "name": "Recipe Parser",
+  "minAppVersion": "1.5.0",
+  "description": "Pull recipe details from images, and help build meal plans",
+  "author": "Jim Wild",
+  "isDesktopOnly": false
+}
