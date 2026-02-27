@@ -29,10 +29,28 @@ export default class RecipeParsingPlugin extends Plugin {
         await this.extractIngredientsFromActiveFile();
       }
     });
+
+    this.addCommand({
+      id: "build-shopping-list-from-meal-plan",
+      name: "Build shopping list from meal plan",
+      callback: async () => {
+        await this.buildShoppingListFromMealPlan();
+      }
+    });
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const saved = (await this.loadData()) as
+      | (RecipeParsingSettings & {model?: string})
+      | null;
+
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved ?? {});
+
+    const legacyModel = saved?.model?.trim();
+    if (legacyModel && !saved?.imageModel && !saved?.textModel) {
+      this.settings.imageModel = legacyModel;
+      this.settings.textModel = legacyModel;
+    }
   }
 
   async saveSettings(): Promise<void> {
@@ -95,6 +113,63 @@ export default class RecipeParsingPlugin extends Plugin {
     new Notice("Ingredients extracted and inserted above each image.");
   }
 
+  private async buildShoppingListFromMealPlan(): Promise<void> {
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile || activeFile.extension !== "md") {
+      new Notice("Open a meal plan markdown file to build a shopping list.");
+      return;
+    }
+
+    const planContent = await this.app.vault.read(activeFile);
+    const needToBuyMatch = planContent.match(/(^#\s*Need to buy[\s\S]*)$/im);
+    if (!needToBuyMatch || needToBuyMatch.index === undefined) {
+      new Notice("No '# Need to buy' section found in the active file.");
+      return;
+    }
+
+    const recipeFiles = this.findLinkedRecipeFiles(activeFile, planContent);
+    if (recipeFiles.length === 0) {
+      new Notice("No linked recipe files found in the meal plan.");
+      return;
+    }
+
+    const recipeContents: string[] = [];
+    for (const file of recipeFiles) {
+      const raw = await this.app.vault.read(file);
+      const cleaned = this.stripImageEmbeds(raw);
+      recipeContents.push(`---\nFile: ${file.path}\n${cleaned}`);
+    }
+
+    const prompt = this.settings.shoppingListPrompt.trim();
+    if (!prompt) {
+      new Notice("Shopping list prompt is empty.");
+      return;
+    }
+
+    const templateSection = needToBuyMatch[0].trim();
+    const llmResult = await this.callLlm([
+      {role: "system", content: prompt},
+      {
+        role: "user",
+        content:
+          `Meal plan shopping list template:\n${templateSection}\n\n` +
+          `Recipes (omit any images already removed):\n${recipeContents.join("\n\n")}`
+      }
+    ], this.settings.textModel);
+
+    const updatedSection = llmResult.trim();
+    if (!/^#\s*Need to buy/i.test(updatedSection)) {
+      new Notice("LLM response did not include a '# Need to buy' section.");
+      return;
+    }
+
+    const updatedContent =
+      planContent.slice(0, needToBuyMatch.index) + updatedSection + "\n";
+
+    await this.app.vault.modify(activeFile, updatedContent);
+    new Notice("Shopping list updated from linked recipes.");
+  }
+
   private findImageLinks(content: string): ImageLinkMatch[] {
     const matches: ImageLinkMatch[] = [];
     const wikiImageRegex = /!\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]+)?\]\]/g;
@@ -115,6 +190,52 @@ export default class RecipeParsingPlugin extends Plugin {
     }
 
     return matches;
+  }
+
+  private findLinkedRecipeFiles(sourceFile: TFile, content: string): TFile[] {
+    const linkPaths = new Set<string>();
+    const wikiLinkRegex = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]+)?\]\]/g;
+
+    for (const match of content.matchAll(wikiLinkRegex)) {
+      if (match.index === undefined) {
+        continue;
+      }
+      const preceding = match.index > 0 ? content[match.index - 1] : "";
+      if (preceding === "!") {
+        continue;
+      }
+      linkPaths.add(match[1]);
+    }
+
+    const files: TFile[] = [];
+    for (const linkPath of linkPaths) {
+      const destination = this.app.metadataCache.getFirstLinkpathDest(
+        linkPath,
+        sourceFile.path
+      );
+      if (destination instanceof TFile && destination.extension === "md") {
+        files.push(destination);
+      }
+    }
+
+    return files;
+  }
+
+  private stripImageEmbeds(content: string): string {
+    const withoutWikiImages = content.replace(
+      /!\[\[[^\]]+\]\]/g,
+      ""
+    );
+    const withoutMarkdownImages = withoutWikiImages.replace(
+      /!\[[^\]]*\]\([^\)]+\)/g,
+      ""
+    );
+    const withoutHtmlImages = withoutMarkdownImages.replace(
+      /<img[^>]*>/gi,
+      ""
+    );
+
+    return withoutHtmlImages;
   }
 
   private resolveImageFile(sourceFile: TFile, linkPath: string): TFile | null {
@@ -154,12 +275,17 @@ export default class RecipeParsingPlugin extends Plugin {
       }
     ];
 
-    return await this.callLlm(messages);
+    return await this.callLlm(messages, this.settings.imageModel);
   }
 
-  private async callLlm(messages: ChatMessage[]): Promise<string> {
+  private async callLlm(messages: ChatMessage[], model: string): Promise<string> {
     if (!this.settings.llmEndpoint.trim()) {
       throw new Error("LLM endpoint is empty");
+    }
+
+    const trimmedModel = model.trim();
+    if (!trimmedModel) {
+      throw new Error("Model is empty");
     }
 
     const headers: Record<string, string> = {
@@ -175,7 +301,7 @@ export default class RecipeParsingPlugin extends Plugin {
       url: this.settings.llmEndpoint,
       headers,
       body: JSON.stringify({
-        model: this.settings.model,
+        model: trimmedModel,
         messages,
         temperature: 0.2
       })
@@ -245,12 +371,22 @@ class RecipeParsingSettingTab extends PluginSettingTab {
     });
 
     this.addTextSetting(containerEl, {
-      name: "Model",
-      desc: "Model name sent in the request body",
-      placeholder: "gpt-4o-mini",
-      value: this.plugin.settings.model,
+      name: "Image model",
+      desc: "Model name used for parsing recipe images",
+      placeholder: "gpt-5.2",
+      value: this.plugin.settings.imageModel,
       onChange: (value) => {
-        this.plugin.settings.model = value.trim() || "gpt-4o-mini";
+        this.plugin.settings.imageModel = value.trim() || "gpt-5.2";
+      }
+    });
+
+    this.addTextSetting(containerEl, {
+      name: "Shopping list model",
+      desc: "Model name used for shopping list generation",
+      placeholder: "gpt-5.2",
+      value: this.plugin.settings.textModel,
+      onChange: (value) => {
+        this.plugin.settings.textModel = value.trim() || "gpt-5.2";
       }
     });
 
@@ -260,6 +396,15 @@ class RecipeParsingSettingTab extends PluginSettingTab {
       value: this.plugin.settings.ingredientsPrompt,
       onChange: (value) => {
         this.plugin.settings.ingredientsPrompt = value;
+      }
+    });
+
+    this.addTextAreaSetting(containerEl, {
+      name: "Shopping list prompt",
+      desc: "Prompt used when building a shopping list from linked recipes.",
+      value: this.plugin.settings.shoppingListPrompt,
+      onChange: (value) => {
+        this.plugin.settings.shoppingListPrompt = value;
       }
     });
   }
