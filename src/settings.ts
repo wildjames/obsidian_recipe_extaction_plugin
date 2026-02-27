@@ -1,26 +1,14 @@
-export interface DailyNotesDigestSettings {
-  dailyNotesFolder: string;
-  outputFolder: string;
+export interface RecipeParsingSettings {
   llmEndpoint: string;
   apiKey: string;
   model: string;
-  promptTemplate: string;
-  checkIntervalMinutes: number;
-  sortDailyNotesAndSummaries: boolean;
-  lastProcessedDate: string;
-  lastOpenedDigestDate: string;
+  ingredientsPrompt: string;
 }
 
-export const DEFAULT_SETTINGS: DailyNotesDigestSettings = {
-  dailyNotesFolder: "daily_notes",
-  outputFolder: "daily_digests",
+export const DEFAULT_SETTINGS: RecipeParsingSettings = {
   llmEndpoint: "https://api.openai.com/v1/chat/completions",
   apiKey: "",
-  model: "gpt-4o-mini",
-  promptTemplate:
-    "Summarize the daily note into concise bullet points and action items.\n\nDate: {{date}}\n\nFocus on key events, decisions, blockers, and next actions.",
-  checkIntervalMinutes: 60,
-  sortDailyNotesAndSummaries: false,
-  lastProcessedDate: "",
-  lastOpenedDigestDate: ""
+  model: "gpt-4.1",
+  ingredientsPrompt:
+    "Extract all the ingredients from this recipe image. Return markdown content (do not surround it with backticks, only return the raw text), in the format:\n# Ingredients\nServes x (if given)\n- ingredient\n- ingredient\n- ingredient"
 };
