@@ -113,10 +113,26 @@ export default class RecipeParsingPlugin extends Plugin {
     }
 
     const planContent = await this.app.vault.read(activeFile);
-    const needToBuyMatch = planContent.match(/(^#\s*Need to buy[\s\S]*)$/im);
-    if (!needToBuyMatch || needToBuyMatch.index === undefined) {
+    const headerMatch = /^(#{1,6})\s*Need to buy\b[^\n]*$/gim.exec(planContent);
+    if (!headerMatch || headerMatch.index === undefined) {
       new Notice("No '# Need to buy' section found in the active file.");
       return;
+    }
+
+    const sectionStart = headerMatch.index;
+    const sectionLevel = headerMatch[1].length;
+    const afterHeaderIndex = sectionStart + headerMatch[0].length;
+    let sectionEnd = planContent.length;
+
+    for (const match of planContent.matchAll(/^(#{1,6})\s+/gm)) {
+      if (match.index === undefined || match.index <= afterHeaderIndex) {
+        continue;
+      }
+      const level = match[1].length;
+      if (level <= sectionLevel) {
+        sectionEnd = match.index;
+        break;
+      }
     }
 
     const recipeFiles = this.findLinkedRecipeFiles(activeFile, planContent);
@@ -138,7 +154,7 @@ export default class RecipeParsingPlugin extends Plugin {
       return;
     }
 
-    const templateSection = needToBuyMatch[0].trim();
+    const templateSection = planContent.slice(sectionStart, sectionEnd).trim();
     const llmResult = await this.callLlm([
       {role: "system", content: prompt},
       {
@@ -155,8 +171,11 @@ export default class RecipeParsingPlugin extends Plugin {
       return;
     }
 
+    const trailingContent = planContent.slice(sectionEnd);
+    const separator =
+      trailingContent === "" ? "\n" : trailingContent.startsWith("\n") ? "" : "\n";
     const updatedContent =
-      planContent.slice(0, needToBuyMatch.index) + updatedSection + "\n";
+      planContent.slice(0, sectionStart) + updatedSection + separator + trailingContent;
 
     await this.app.vault.modify(activeFile, updatedContent);
     new Notice("Shopping list updated from linked recipes.");
