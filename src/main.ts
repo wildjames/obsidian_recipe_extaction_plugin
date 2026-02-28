@@ -73,20 +73,17 @@ export default class RecipeParsingPlugin extends Plugin {
     }
 
     let updatedContent = noteContent;
-    const errors: string[] = [];
 
     for (const match of [...matches].sort((a, b) => b.start - a.start)) {
       try {
         const imageFile = this.resolveImageFile(activeFile, match.linkPath);
         if (!imageFile) {
-          errors.push(`Missing attachment: ${match.linkPath}`);
-          continue;
+          throw new Error(`Attachment not found: ${match.linkPath}`);
         }
 
         const llmResult = await this.callLlmForImage(imageFile);
         if (!llmResult.trim()) {
-          errors.push(`Empty LLM response for: ${imageFile.name}`);
-          continue;
+          throw new Error(`LLM returned empty response for: ${imageFile.name}`);
         }
 
         const insertText = `${llmResult.trim()}\n\n`;
@@ -96,7 +93,8 @@ export default class RecipeParsingPlugin extends Plugin {
           updatedContent.slice(match.start);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        errors.push(`${match.linkPath}: ${message}`);
+        new Notice(`${match.linkPath}: ${message}`);
+        return;
       }
     }
 
@@ -104,13 +102,7 @@ export default class RecipeParsingPlugin extends Plugin {
       await this.app.vault.modify(activeFile, updatedContent);
     }
 
-    if (errors.length > 0) {
-      new Notice(`Recipe information extraction completed with ${errors.length} issue(s).`);
-      console.error("Recipe extraction issues", errors);
-      return;
-    }
-
-    new Notice("Recipe information extracted and inserted above each image.");
+    new Notice("Recipe information extracted and inserted detected images.");
   }
 
   private async buildShoppingListFromMealPlan(): Promise<void> {
@@ -260,7 +252,7 @@ export default class RecipeParsingPlugin extends Plugin {
     }
 
     const binary = await this.app.vault.readBinary(imageFile);
-    const base64 = Buffer.from(binary).toString("base64");
+    const base64 = this.toBase64(binary);
     const mime = this.getMimeType(imageFile.extension);
     const dataUrl = `data:${mime};base64,${base64}`;
 
@@ -336,6 +328,19 @@ export default class RecipeParsingPlugin extends Plugin {
         return "application/octet-stream";
     }
   }
+
+  private toBase64(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunkSize = 0x8000;
+
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+
+    return btoa(binary);
+  }
 }
 
 class RecipeParsingSettingTab extends PluginSettingTab {
@@ -372,7 +377,7 @@ class RecipeParsingSettingTab extends PluginSettingTab {
 
     this.addTextSetting(containerEl, {
       name: "Image model",
-      desc: "Model name used for parsing recipe images",
+      desc: "Model name used for parsing images",
       placeholder: "gpt-5.2",
       value: this.plugin.settings.imageModel,
       onChange: (value) => {
@@ -381,8 +386,8 @@ class RecipeParsingSettingTab extends PluginSettingTab {
     });
 
     this.addTextSetting(containerEl, {
-      name: "Shopping list model",
-      desc: "Model name used for shopping list generation",
+      name: "Text model",
+      desc: "Model name used for Text generation",
       placeholder: "gpt-5.2",
       value: this.plugin.settings.textModel,
       onChange: (value) => {
