@@ -1,4 +1,4 @@
-import {App, Notice, Plugin, PluginSettingTab, Setting, TFile, requestUrl} from "obsidian";
+import {App, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFile, requestUrl} from "obsidian";
 import {DEFAULT_SETTINGS, RecipeParsingSettings} from "./settings";
 
 type ImageTextPart = {type: "text"; text: string};
@@ -12,6 +12,12 @@ type ChatMessage = {
 type ImageLinkMatch = {
   linkPath: string;
   start: number;
+};
+
+type UrlMatch = {
+  url: string;
+  start: number;
+  end: number;
 };
 
 export default class RecipeParsingPlugin extends Plugin {
@@ -35,6 +41,14 @@ export default class RecipeParsingPlugin extends Plugin {
       name: "Build shopping list from meal plan",
       callback: async () => {
         await this.buildShoppingListFromMealPlan();
+      }
+    });
+
+    this.addCommand({
+      id: "extract-recipe-from-webpage",
+      name: "Extract recipe from webpage",
+      callback: async () => {
+        await this.extractRecipeFromWebpage();
       }
     });
   }
@@ -170,6 +184,94 @@ export default class RecipeParsingPlugin extends Plugin {
     new Notice("Shopping list updated from linked recipes.");
   }
 
+  private async extractRecipeFromWebpage(): Promise<void> {
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile || activeFile.extension !== "md") {
+      new Notice("Open a markdown file with a recipe link to extract.");
+      return;
+    }
+
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const selection = view?.editor?.getSelection()?.trim() ?? "";
+    const selectedUrl = this.extractUrlFromSelection(selection);
+
+    const noteContent = await this.app.vault.read(activeFile);
+    const urlMatch = this.findHttpLink(noteContent, selectedUrl ?? undefined);
+    if (!urlMatch) {
+      new Notice("No recipe link found in the active file.");
+      return;
+    }
+
+    const prompt = this.settings.webRecipePrompt.trim();
+    if (!prompt) {
+      new Notice("Web recipe prompt is empty.");
+      return;
+    }
+
+    let responseText = "";
+    try {
+      const response = await requestUrl({
+        method: "GET",
+        url: urlMatch.url
+      });
+
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`Fetch failed (${response.status})`);
+      }
+
+      if (typeof response.text === "string") {
+        responseText = response.text;
+      } else if (response.arrayBuffer) {
+        responseText = new TextDecoder("utf-8").decode(response.arrayBuffer);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      new Notice(`Failed to fetch webpage: ${message}`);
+      return;
+    }
+
+    if (!responseText.trim()) {
+      new Notice("Fetched webpage content was empty.");
+      return;
+    }
+
+    const cleanedHtml = this.sanitizeHtmlForLlm(responseText);
+    const {text: truncatedHtml, truncated} = this.truncateForLlm(cleanedHtml, 120000);
+    const truncationNote = truncated ? "(HTML truncated for size)\n" : "";
+
+    let llmResult = "";
+    try {
+      llmResult = await this.callLlm([
+        {role: "system", content: prompt},
+        {
+          role: "user",
+          content:
+            `URL: ${urlMatch.url}\n` +
+            `${truncationNote}\n` +
+            `HTML:\n${truncatedHtml}`
+        }
+      ], this.settings.textModel);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      new Notice(`LLM request failed: ${message}`);
+      return;
+    }
+
+    const recipeMarkdown = llmResult.trim();
+    if (!recipeMarkdown) {
+      new Notice("LLM returned an empty recipe.");
+      return;
+    }
+
+    const insertAt = this.findLineEndIndex(noteContent, urlMatch.end);
+    const insertText = `\n${recipeMarkdown}\n`;
+    const updatedContent =
+      noteContent.slice(0, insertAt) + insertText + noteContent.slice(insertAt);
+
+    await this.app.vault.modify(activeFile, updatedContent);
+    new Notice("Recipe extracted and inserted below the link.");
+  }
+
   private findImageLinks(content: string): ImageLinkMatch[] {
     const matches: ImageLinkMatch[] = [];
     const wikiImageRegex = /!\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]+)?\]\]/g;
@@ -236,6 +338,76 @@ export default class RecipeParsingPlugin extends Plugin {
     );
 
     return withoutHtmlImages;
+  }
+
+  private extractUrlFromSelection(selection: string): string | null {
+    if (!selection) {
+      return null;
+    }
+
+    const markdownLinkMatch = selection.match(/\[[^\]]*\]\((https?:\/\/[^\s)]+)(?:\s+"[^"]*")?\)/i);
+    if (markdownLinkMatch?.[1]) {
+      return markdownLinkMatch[1];
+    }
+
+    const urlMatch = selection.match(/https?:\/\/[^\s)]+/i);
+    return urlMatch?.[0] ?? null;
+  }
+
+  private findHttpLink(content: string, preferredUrl?: string): UrlMatch | null {
+    const matches: UrlMatch[] = [];
+    const markdownLinkRegex = /\[[^\]]*\]\((https?:\/\/[^\s)]+)(?:\s+"[^"]*")?\)/g;
+    const bareUrlRegex = /https?:\/\/[^\s)]+/g;
+
+    for (const match of content.matchAll(markdownLinkRegex)) {
+      if (match.index === undefined) {
+        continue;
+      }
+      const url = match[1];
+      matches.push({url, start: match.index, end: match.index + match[0].length});
+    }
+
+    for (const match of content.matchAll(bareUrlRegex)) {
+      if (match.index === undefined) {
+        continue;
+      }
+      const url = match[0];
+      matches.push({url, start: match.index, end: match.index + match[0].length});
+    }
+
+    if (matches.length === 0) {
+      return null;
+    }
+
+    if (preferredUrl) {
+      const preferred = matches.find((match) => match.url === preferredUrl);
+      if (preferred) {
+        return preferred;
+      }
+    }
+
+    return matches[0];
+  }
+
+  private findLineEndIndex(content: string, startIndex: number): number {
+    const lineEnd = content.indexOf("\n", startIndex);
+    return lineEnd === -1 ? content.length : lineEnd + 1;
+  }
+
+  private sanitizeHtmlForLlm(html: string): string {
+    return html
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
+      .replace(/<svg[\s\S]*?<\/svg>/gi, "");
+  }
+
+  private truncateForLlm(content: string, maxChars: number): {text: string; truncated: boolean} {
+    if (content.length <= maxChars) {
+      return {text: content, truncated: false};
+    }
+
+    return {text: content.slice(0, maxChars), truncated: true};
   }
 
   private resolveImageFile(sourceFile: TFile, linkPath: string): TFile | null {
@@ -396,6 +568,15 @@ class RecipeParsingSettingTab extends PluginSettingTab {
       value: this.plugin.settings.bookExtractionPrompt,
       onChange: (value) => {
         this.plugin.settings.bookExtractionPrompt = value;
+      }
+    });
+
+    this.addTextAreaSetting(containerEl, {
+      name: "Web recipe prompt",
+      desc: "Prompt used when extracting recipes from web pages.",
+      value: this.plugin.settings.webRecipePrompt,
+      onChange: (value) => {
+        this.plugin.settings.webRecipePrompt = value;
       }
     });
 
