@@ -130,19 +130,21 @@ describe("build shopping list command", () => {
     expect(Array.isArray(capturedMessages)).toBe(true);
     const messages = capturedMessages as Array<{role: string; content: string}>;
     expect(messages).toHaveLength(2);
-    expect(messages[0]).toEqual({
+    expect(messages[0].role).toBe("user");
+    expect(messages[0].content).toContain("Meal plan:");
+    expect(messages[0].content).toContain(planContent.trim());
+    expect(messages[0].content).toContain("Recipes (omit any images already removed):");
+    expect(messages[0].content).toContain(`---\nFile: ${recipeFile.path}`);
+    expect(messages[0].content).toContain("Keep this.");
+    expect(messages[0].content).toContain("Meal plan shopping list template:");
+    expect(messages[0].content).toContain(templateSection ?? "");
+    expect(messages[0].content).not.toMatch(/!\[\[/);
+    expect(messages[0].content).not.toMatch(/!\[[^\]]*\]\([^\)]*\)/);
+    expect(messages[0].content).not.toMatch(/<img[^>]*>/i);
+    expect(messages[1]).toEqual({
       role: "system",
       content: plugin.settings.shoppingListPrompt.trim()
     });
-    expect(messages[1].role).toBe("user");
-    expect(messages[1].content).toContain("Meal plan shopping list template:");
-    expect(messages[1].content).toContain(templateSection ?? "");
-    expect(messages[1].content).toContain("Recipes (omit any images already removed):");
-    expect(messages[1].content).toContain(`---\nFile: ${recipeFile.path}`);
-    expect(messages[1].content).toContain("Keep this.");
-    expect(messages[1].content).not.toMatch(/!\[\[/);
-    expect(messages[1].content).not.toMatch(/!\[[^\]]*\]\([^\)]*\)/);
-    expect(messages[1].content).not.toMatch(/<img[^>]*>/i);
   });
 
   it("requires LLM response to include '# Need to buy' header", async () => {
