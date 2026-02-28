@@ -159,6 +159,7 @@ export default class RecipeParsingPlugin extends Plugin {
 
     const templateSection = planContent.slice(sectionStart, sectionEnd).trim();
     const llmResult = await this.callLlm([
+      // Single prompt for better speed - this task is simple and doesn't require much reasoning.
       {
         role: "user",
         content:
