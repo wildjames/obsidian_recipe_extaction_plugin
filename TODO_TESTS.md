@@ -47,19 +47,19 @@
 - [x] Handles links with alias/heading.
 
 ## stripImageEmbeds
-- [ ] Removes wiki image embeds.
-- [ ] Removes markdown image embeds.
-- [ ] Removes HTML `<img>` tags (case-insensitive).
-- [ ] Leaves non-image content untouched.
-- [ ] Works with multiple images in a single file.
+- [x] Removes wiki image embeds.
+- [x] Removes markdown image embeds.
+- [x] Removes HTML `<img>` tags (case-insensitive).
+- [x] Leaves non-image content untouched.
+- [x] Works with multiple images in a single file.
 
 ## resolveImageFile
-- [ ] Trims whitespace and ignores empty paths.
-- [ ] Rejects http/https URLs.
-- [ ] Rejects data URLs.
-- [ ] Strips `|alias` and `#heading` portions.
-- [ ] Resolves to a `TFile` when metadata cache returns a file.
-- [ ] Returns null when no destination found.
+- [x] Trims whitespace and ignores empty paths.
+- [x] Rejects http/https URLs.
+- [x] Rejects data URLs.
+- [x] Strips `|alias` and `#heading` portions.
+- [x] Resolves to a `TFile` when metadata cache returns a file.
+- [x] Returns null when no destination found.
 
 ## callLlmForImage
 - [ ] Throws when book extraction prompt is empty/whitespace.
