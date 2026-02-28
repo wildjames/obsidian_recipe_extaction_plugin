@@ -130,7 +130,7 @@ describe("callLlm", () => {
   });
 });
 
-describe("callLlmForImage", () => {
+describe("callLlmForImages", () => {
   let plugin: TestPlugin;
 
   beforeAll(() => {
@@ -149,12 +149,13 @@ describe("callLlmForImage", () => {
     const imageFile = new Obsidian.TFile("image.png");
 
     await expect(
-      (plugin as unknown as {callLlmForImage: (file: Obsidian.TFile) => Promise<string>})
-        .callLlmForImage(imageFile)
+      (plugin as unknown as {
+        callLlmForImages: (images: Array<{file: Obsidian.TFile; label: string}>) => Promise<string>;
+      }).callLlmForImages([{file: imageFile, label: "image.png"}])
     ).rejects.toThrow("Ingredients prompt is empty");
   });
 
-  it("reads binary content and sends image payload with data URL", async () => {
+  it("reads binary content and sends image payloads with data URLs", async () => {
     const imageFile = new Obsidian.TFile("assets/photo.png");
     const binary = new Uint8Array([72, 105]).buffer; // "Hi"
 
@@ -170,31 +171,37 @@ describe("callLlmForImage", () => {
         return "ok";
       });
 
-    const result = await (plugin as unknown as {callLlmForImage: (file: Obsidian.TFile) => Promise<string>})
-      .callLlmForImage(imageFile);
+    const result = await (plugin as unknown as {
+      callLlmForImages: (images: Array<{file: Obsidian.TFile; label: string}>) => Promise<string>;
+    }).callLlmForImages([{file: imageFile, label: "assets/photo.png"}]);
 
     expect(result).toBe("ok");
     expect(plugin.app.vault.readBinary).toHaveBeenCalledWith(imageFile);
     expect(capturedModel).toBe(plugin.settings.imageModel);
 
     expect(capturedMessages).toHaveLength(2);
-    const [systemMessage, userMessage] = capturedMessages as Array<{role: string; content: unknown}>;
-    expect(systemMessage).toEqual({
-      role: "system",
-      content: plugin.settings.bookExtractionPrompt.trim()
-    });
+    const [userMessage, systemMessage] = capturedMessages as Array<{role: string; content: unknown}>;
 
     const userContent = userMessage.content as Array<{type: string; text?: string; image_url?: {url: string}}>;
     expect(userMessage.role).toBe("user");
     expect(userContent[0]).toEqual({
       type: "text",
-      text: "Recipe image for ingredient extraction."
+      text: "Extract information from all images. Return a combined response."
     });
     expect(userContent[1]).toEqual({
+      type: "text",
+      text: "Image 1: assets/photo.png"
+    });
+    expect(userContent[2]).toEqual({
       type: "image_url",
       image_url: {
         url: "data:image/png;base64,SGk="
       }
+    });
+
+    expect(systemMessage).toEqual({
+      role: "system",
+      content: plugin.settings.bookExtractionPrompt.trim()
     });
   });
 
@@ -216,14 +223,15 @@ describe("callLlmForImage", () => {
       let capturedUrl = "";
       vi.spyOn(plugin as unknown as {callLlm: (messages: unknown[], model: string) => Promise<string>}, "callLlm")
         .mockImplementationOnce(async (messages) => {
-          const userMessage = (messages[1] as {content: Array<{image_url?: {url: string}}>}).content;
-          capturedUrl = userMessage[1]?.image_url?.url ?? "";
+          const userMessage = (messages[0] as {content: Array<{image_url?: {url: string}}>}).content;
+          capturedUrl = userMessage[2]?.image_url?.url ?? "";
           return "ok";
         });
 
       const imageFile = new Obsidian.TFile(`photo.${ext}`);
-      await (plugin as unknown as {callLlmForImage: (file: Obsidian.TFile) => Promise<string>})
-        .callLlmForImage(imageFile);
+      await (plugin as unknown as {
+        callLlmForImages: (images: Array<{file: Obsidian.TFile; label: string}>) => Promise<string>;
+      }).callLlmForImages([{file: imageFile, label: `photo.${ext}`}]);
 
       expect(capturedUrl.startsWith(`data:${mime};base64,`)).toBe(true);
     }
