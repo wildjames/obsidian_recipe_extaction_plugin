@@ -159,13 +159,14 @@ export default class RecipeParsingPlugin extends Plugin {
 
     const templateSection = planContent.slice(sectionStart, sectionEnd).trim();
     const llmResult = await this.callLlm([
-      {role: "system", content: prompt},
       {
         role: "user",
         content:
-          `Meal plan shopping list template:\n${templateSection}\n\n` +
-          `Recipes (omit any images already removed):\n${recipeContents.join("\n\n")}`
-      }
+          `Meal plan:\n${planContent.trim()}\n\n` +
+          `Recipes (omit any images already removed):\n${recipeContents.join("\n\n")}` +
+          `Meal plan shopping list template:\n${templateSection}\n\n`
+      },
+      {role: "system", content: prompt}
     ], this.settings.textModel);
 
     const updatedSection = llmResult.trim();
