@@ -8,28 +8,28 @@
 - [x] Save settings persists current values via `saveData`.
 
 ## Command: Parse Recipe Images
-- [ ] Shows notice when no active file.
-- [ ] Shows notice when active file is not markdown.
-- [ ] Shows notice when file has no image links.
-- [ ] Inserts extracted text before each image link (positions based on original indices, reverse order insertion).
-- [ ] Handles multiple image links with mixed wiki and markdown formats.
-- [ ] Does not modify file when LLM response is empty/whitespace (error notice).
-- [ ] Uses `resolveImageFile` and errors when attachment not found (notice includes link path).
-- [ ] Does not modify file when an error occurs mid-loop (early return).
-- [ ] Writes updated content only when changes are made.
-- [ ] Success notice after insertion.
+- [x] Shows notice when no active file.
+- [x] Shows notice when active file is not markdown.
+- [x] Shows notice when file has no image links.
+- [x] Inserts extracted text before each image link (positions based on original indices, reverse order insertion).
+- [x] Handles multiple image links with mixed wiki and markdown formats.
+- [x] Does not modify file when LLM response is empty/whitespace (error notice).
+- [x] Uses `resolveImageFile` and errors when attachment not found (notice includes link path).
+- [x] Does not modify file when an error occurs mid-loop (early return).
+- [x] Writes updated content only when changes are made.
+- [x] Success notice after insertion.
 
 ## Command: Build Shopping List
-- [ ] Shows notice when no active file.
-- [ ] Shows notice when active file is not markdown.
-- [ ] Shows notice when '# Need to buy' section is missing.
-- [ ] Shows notice when no linked recipe files are found.
-- [ ] Shows notice when shopping list prompt is empty/whitespace.
-- [ ] Strips image embeds from recipe contents before sending to LLM.
-- [ ] Builds LLM prompt with template section and cleaned recipes.
-- [ ] Valid LLM response must include '# Need to buy' header; otherwise notice and no file change.
-- [ ] Replaces only the matched Need to buy section and keeps rest of file intact.
-- [ ] Success notice after updating content.
+- [x] Shows notice when no active file.
+- [x] Shows notice when active file is not markdown.
+- [x] Shows notice when '# Need to buy' section is missing.
+- [x] Shows notice when no linked recipe files are found.
+- [x] Shows notice when shopping list prompt is empty/whitespace.
+- [x] Strips image embeds from recipe contents before sending to LLM.
+- [x] Builds LLM prompt with template section and cleaned recipes.
+- [x] Valid LLM response must include '# Need to buy' header; otherwise notice and no file change.
+- [x] Replaces only the matched Need to buy section and keeps rest of file intact.
+- [x] Success notice after updating content.
 
 ## findImageLinks
 - [ ] Matches wiki embeds: `![[image.png]]`.
