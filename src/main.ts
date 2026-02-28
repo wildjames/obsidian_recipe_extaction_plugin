@@ -87,20 +87,17 @@ export default class RecipeParsingPlugin extends Plugin {
     }
 
     let updatedContent = noteContent;
-    const errors: string[] = [];
 
     for (const match of [...matches].sort((a, b) => b.start - a.start)) {
       try {
         const imageFile = this.resolveImageFile(activeFile, match.linkPath);
         if (!imageFile) {
-          errors.push(`Missing attachment: ${match.linkPath}`);
-          continue;
+          throw new Error(`Attachment not found: ${match.linkPath}`);
         }
 
         const llmResult = await this.callLlmForImage(imageFile);
         if (!llmResult.trim()) {
-          errors.push(`Empty LLM response for: ${imageFile.name}`);
-          continue;
+          throw new Error(`LLM returned empty response for: ${imageFile.name}`);
         }
 
         const insertText = `${llmResult.trim()}\n\n`;
@@ -110,7 +107,8 @@ export default class RecipeParsingPlugin extends Plugin {
           updatedContent.slice(match.start);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        errors.push(`${match.linkPath}: ${message}`);
+        new Notice(`${match.linkPath}: ${message}`);
+        return;
       }
     }
 
@@ -118,13 +116,7 @@ export default class RecipeParsingPlugin extends Plugin {
       await this.app.vault.modify(activeFile, updatedContent);
     }
 
-    if (errors.length > 0) {
-      new Notice(`Recipe information extraction completed with ${errors.length} issue(s).`);
-      console.error("Recipe extraction issues", errors);
-      return;
-    }
-
-    new Notice("Recipe information extracted and inserted above each image.");
+    new Notice("Recipe information extracted and inserted detected images.");
   }
 
   private async buildShoppingListFromMealPlan(): Promise<void> {
@@ -135,10 +127,26 @@ export default class RecipeParsingPlugin extends Plugin {
     }
 
     const planContent = await this.app.vault.read(activeFile);
-    const needToBuyMatch = planContent.match(/(^#\s*Need to buy[\s\S]*)$/im);
-    if (!needToBuyMatch || needToBuyMatch.index === undefined) {
+    const headerMatch = /^(#{1,6})\s*Need to buy\b[^\n]*$/gim.exec(planContent);
+    if (!headerMatch || headerMatch.index === undefined) {
       new Notice("No '# Need to buy' section found in the active file.");
       return;
+    }
+
+    const sectionStart = headerMatch.index;
+    const sectionLevel = headerMatch[1].length;
+    const afterHeaderIndex = sectionStart + headerMatch[0].length;
+    let sectionEnd = planContent.length;
+
+    for (const match of planContent.matchAll(/^(#{1,6})\s+/gm)) {
+      if (match.index === undefined || match.index <= afterHeaderIndex) {
+        continue;
+      }
+      const level = match[1].length;
+      if (level <= sectionLevel) {
+        sectionEnd = match.index;
+        break;
+      }
     }
 
     const recipeFiles = this.findLinkedRecipeFiles(activeFile, planContent);
@@ -160,7 +168,7 @@ export default class RecipeParsingPlugin extends Plugin {
       return;
     }
 
-    const templateSection = needToBuyMatch[0].trim();
+    const templateSection = planContent.slice(sectionStart, sectionEnd).trim();
     const llmResult = await this.callLlm([
       {role: "system", content: prompt},
       {
@@ -177,8 +185,11 @@ export default class RecipeParsingPlugin extends Plugin {
       return;
     }
 
+    const trailingContent = planContent.slice(sectionEnd);
+    const separator =
+      trailingContent === "" ? "\n" : trailingContent.startsWith("\n") ? "" : "\n";
     const updatedContent =
-      planContent.slice(0, needToBuyMatch.index) + updatedSection + "\n";
+      planContent.slice(0, sectionStart) + updatedSection + separator + trailingContent;
 
     await this.app.vault.modify(activeFile, updatedContent);
     new Notice("Shopping list updated from linked recipes.");
@@ -432,7 +443,7 @@ export default class RecipeParsingPlugin extends Plugin {
     }
 
     const binary = await this.app.vault.readBinary(imageFile);
-    const base64 = Buffer.from(binary).toString("base64");
+    const base64 = this.toBase64(binary);
     const mime = this.getMimeType(imageFile.extension);
     const dataUrl = `data:${mime};base64,${base64}`;
 
@@ -508,6 +519,19 @@ export default class RecipeParsingPlugin extends Plugin {
         return "application/octet-stream";
     }
   }
+
+  private toBase64(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunkSize = 0x8000;
+
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+
+    return btoa(binary);
+  }
 }
 
 class RecipeParsingSettingTab extends PluginSettingTab {
@@ -544,7 +568,7 @@ class RecipeParsingSettingTab extends PluginSettingTab {
 
     this.addTextSetting(containerEl, {
       name: "Image model",
-      desc: "Model name used for parsing recipe images",
+      desc: "Model name used for parsing images",
       placeholder: "gpt-5.2",
       value: this.plugin.settings.imageModel,
       onChange: (value) => {
@@ -553,8 +577,8 @@ class RecipeParsingSettingTab extends PluginSettingTab {
     });
 
     this.addTextSetting(containerEl, {
-      name: "Shopping list model",
-      desc: "Model name used for shopping list generation",
+      name: "Text model",
+      desc: "Model name used for Text generation",
       placeholder: "gpt-5.2",
       value: this.plugin.settings.textModel,
       onChange: (value) => {
