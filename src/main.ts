@@ -23,10 +23,10 @@ export default class RecipeParsingPlugin extends Plugin {
     this.addSettingTab(new RecipeParsingSettingTab(this.app, this));
 
     this.addCommand({
-      id: "extract-ingredients-from-attachments",
-      name: "Extract ingredients from attachments",
+      id: "parse-recipe-book-attachments",
+      name: "Parse recipe images",
       callback: async () => {
-        await this.extractIngredientsFromActiveFile();
+        await this.extractRecipeInformationFromActiveFile();
       }
     });
 
@@ -57,7 +57,7 @@ export default class RecipeParsingPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
-  private async extractIngredientsFromActiveFile(): Promise<void> {
+  private async extractRecipeInformationFromActiveFile(): Promise<void> {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile || activeFile.extension !== "md") {
       new Notice("Open a markdown file to extract ingredients.");
@@ -105,12 +105,12 @@ export default class RecipeParsingPlugin extends Plugin {
     }
 
     if (errors.length > 0) {
-      new Notice(`Ingredient extraction completed with ${errors.length} issue(s).`);
-      console.error("Ingredient extraction issues", errors);
+      new Notice(`Recipe information extraction completed with ${errors.length} issue(s).`);
+      console.error("Recipe extraction issues", errors);
       return;
     }
 
-    new Notice("Ingredients extracted and inserted above each image.");
+    new Notice("Recipe information extracted and inserted above each image.");
   }
 
   private async buildShoppingListFromMealPlan(): Promise<void> {
@@ -254,7 +254,7 @@ export default class RecipeParsingPlugin extends Plugin {
   }
 
   private async callLlmForImage(imageFile: TFile): Promise<string> {
-    const prompt = this.settings.ingredientsPrompt.trim();
+    const prompt = this.settings.bookExtractionPrompt.trim();
     if (!prompt) {
       throw new Error("Ingredients prompt is empty");
     }
@@ -393,9 +393,9 @@ class RecipeParsingSettingTab extends PluginSettingTab {
     this.addTextAreaSetting(containerEl, {
       name: "Ingredients prompt",
       desc: "Prompt used when extracting ingredients from image attachments.",
-      value: this.plugin.settings.ingredientsPrompt,
+      value: this.plugin.settings.bookExtractionPrompt,
       onChange: (value) => {
-        this.plugin.settings.ingredientsPrompt = value;
+        this.plugin.settings.bookExtractionPrompt = value;
       }
     });
 
