@@ -62,40 +62,45 @@ describe("parse recipe images command", () => {
     expect(plugin.app.vault.modify).not.toHaveBeenCalled();
   });
 
-  it("inserts extracted text before each image link in reverse order", async () => {
+  it("inserts extracted text once before the first image link", async () => {
     const activeFile = new Obsidian.TFile("recipes.md");
     const content = "Start\n![[one.png]]\nMiddle\n![two](two.jpg)\nEnd";
     const expected =
-      "Start\nTextOne\n\n![[one.png]]\nMiddle\nTextTwo\n\n![two](two.jpg)\nEnd";
+      "Start\nCombinedText\n\n![[one.png]]\nMiddle\n![two](two.jpg)\nEnd";
 
     plugin.app.workspace.getActiveFile = vi.fn().mockReturnValue(activeFile);
     plugin.app.vault.read = vi.fn().mockResolvedValue(content);
     plugin.app.vault.modify = vi.fn().mockResolvedValue();
     plugin.app.metadataCache.getFirstLinkpathDest = vi.fn((linkPath: string) => {
+      const oneFile = new Obsidian.TFile("one.png");
+      const twoFile = new Obsidian.TFile("two.jpg");
       if (linkPath === "one.png") {
-        return new Obsidian.TFile("one.png");
+        return oneFile;
       }
       if (linkPath === "two.jpg") {
-        return new Obsidian.TFile("two.jpg");
+        return twoFile;
       }
       return null;
     });
 
-    vi.spyOn(plugin as unknown as {callLlmForImage: (file: Obsidian.TFile) => Promise<string>}, "callLlmForImage")
-      .mockImplementation(async (file) => {
-        if (file.name === "one.png") {
-          return "TextOne";
-        }
-        if (file.name === "two.jpg") {
-          return "TextTwo";
-        }
-        return "";
-      });
+    const llmSpy = vi
+      .spyOn(
+        plugin as unknown as {
+          callLlmForImages: (images: Array<{file: Obsidian.TFile; label: string}>) => Promise<string>;
+        },
+        "callLlmForImages"
+      )
+      .mockResolvedValue("CombinedText");
 
     await runExtract();
 
     expect(plugin.app.vault.modify).toHaveBeenCalledWith(activeFile, expected);
-    expect(notices).toContain("Recipe information extracted and inserted detected images.");
+    expect(llmSpy).toHaveBeenCalledTimes(1);
+    const callArgs = llmSpy.mock.calls[0]?.[0] ?? [];
+    expect(callArgs).toHaveLength(2);
+    expect(callArgs[0]?.label).toBe("one.png");
+    expect(callArgs[1]?.label).toBe("two.jpg");
+    expect(notices).toContain("Recipe information extracted and inserted for detected images.");
   });
 
   it("does not modify file when LLM response is empty", async () => {
@@ -107,15 +112,17 @@ describe("parse recipe images command", () => {
     plugin.app.vault.modify = vi.fn().mockResolvedValue();
     plugin.app.metadataCache.getFirstLinkpathDest = vi.fn(() => new Obsidian.TFile("image.png"));
 
-    vi.spyOn(plugin as unknown as {callLlmForImage: (file: Obsidian.TFile) => Promise<string>}, "callLlmForImage")
-      .mockResolvedValue("   ");
+    vi.spyOn(
+      plugin as unknown as {
+        callLlmForImages: (images: Array<{file: Obsidian.TFile; label: string}>) => Promise<string>;
+      },
+      "callLlmForImages"
+    ).mockResolvedValue("   ");
 
     await runExtract();
 
     expect(plugin.app.vault.modify).not.toHaveBeenCalled();
-    expect(notices).toEqual([
-      "image.png: LLM returned empty response for: image.png"
-    ]);
+    expect(notices).toEqual(["LLM returned empty response for images"]);
   });
 
   it("uses resolveImageFile and errors when attachment not found", async () => {
@@ -134,12 +141,10 @@ describe("parse recipe images command", () => {
 
     expect(resolveSpy).toHaveBeenCalledWith(activeFile, "missing.png");
     expect(plugin.app.vault.modify).not.toHaveBeenCalled();
-    expect(notices).toEqual([
-      "missing.png: Attachment not found: missing.png"
-    ]);
+    expect(notices).toEqual(["Attachment not found: missing.png"]);
   });
 
-  it("does not modify file when an error occurs mid-loop", async () => {
+  it("does not modify file when an LLM error occurs", async () => {
     const activeFile = new Obsidian.TFile("recipes.md");
     const content = "Start\n![[one.png]]\nMiddle\n![two](two.jpg)\nEnd";
 
@@ -156,21 +161,20 @@ describe("parse recipe images command", () => {
       return null;
     });
 
-    vi.spyOn(plugin as unknown as {callLlmForImage: (file: Obsidian.TFile) => Promise<string>}, "callLlmForImage")
-      .mockImplementation(async (file) => {
-        if (file.name === "two.jpg") {
-          return "TextTwo";
-        }
-        throw new Error("boom");
-      });
+    vi.spyOn(
+      plugin as unknown as {
+        callLlmForImages: (images: Array<{file: Obsidian.TFile; label: string}>) => Promise<string>;
+      },
+      "callLlmForImages"
+    ).mockRejectedValue(new Error("boom"));
 
     await runExtract();
 
     expect(plugin.app.vault.modify).not.toHaveBeenCalled();
-    expect(notices).toEqual(["one.png: boom"]);
+    expect(notices).toEqual(["boom"]);
   });
 
-  it("propagates LLM errors into notices with link path", async () => {
+  it("propagates LLM errors into notices", async () => {
     const activeFile = new Obsidian.TFile("recipes.md");
     const content = "Intro\n![[image.png]]";
 
@@ -179,12 +183,16 @@ describe("parse recipe images command", () => {
     plugin.app.vault.modify = vi.fn().mockResolvedValue();
     plugin.app.metadataCache.getFirstLinkpathDest = vi.fn(() => new Obsidian.TFile("image.png"));
 
-    vi.spyOn(plugin as unknown as {callLlmForImage: (file: Obsidian.TFile) => Promise<string>}, "callLlmForImage")
-      .mockRejectedValue(new Error("LLM is down"));
+    vi.spyOn(
+      plugin as unknown as {
+        callLlmForImages: (images: Array<{file: Obsidian.TFile; label: string}>) => Promise<string>;
+      },
+      "callLlmForImages"
+    ).mockRejectedValue(new Error("LLM is down"));
 
     await runExtract();
 
     expect(plugin.app.vault.modify).not.toHaveBeenCalled();
-    expect(notices).toEqual(["image.png: LLM is down"]);
+    expect(notices).toEqual(["LLM is down"]);
   });
 });

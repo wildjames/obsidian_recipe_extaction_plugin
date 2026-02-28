@@ -74,35 +74,38 @@ export default class RecipeParsingPlugin extends Plugin {
 
     let updatedContent = noteContent;
 
-    for (const match of [...matches].sort((a, b) => b.start - a.start)) {
-      try {
+    try {
+      const resolvedImages: Array<{file: TFile; label: string}> = [];
+      for (const match of matches) {
         const imageFile = this.resolveImageFile(activeFile, match.linkPath);
         if (!imageFile) {
           throw new Error(`Attachment not found: ${match.linkPath}`);
         }
-
-        const llmResult = await this.callLlmForImage(imageFile);
-        if (!llmResult.trim()) {
-          throw new Error(`LLM returned empty response for: ${imageFile.name}`);
-        }
-
-        const insertText = `${llmResult.trim()}\n\n`;
-        updatedContent =
-          updatedContent.slice(0, match.start) +
-          insertText +
-          updatedContent.slice(match.start);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        new Notice(`${match.linkPath}: ${message}`);
-        return;
+        resolvedImages.push({file: imageFile, label: match.linkPath});
       }
+
+      const llmResult = await this.callLlmForImages(resolvedImages);
+      if (!llmResult.trim()) {
+        throw new Error("LLM returned empty response for images");
+      }
+
+      const insertText = `${llmResult.trim()}\n\n`;
+      const firstMatch = [...matches].sort((a, b) => a.start - b.start)[0];
+      updatedContent =
+        updatedContent.slice(0, firstMatch.start) +
+        insertText +
+        updatedContent.slice(firstMatch.start);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      new Notice(message);
+      return;
     }
 
     if (updatedContent !== noteContent) {
       await this.app.vault.modify(activeFile, updatedContent);
     }
 
-    new Notice("Recipe information extracted and inserted detected images.");
+    new Notice("Recipe information extracted and inserted for detected images.");
   }
 
   private async buildShoppingListFromMealPlan(): Promise<void> {
@@ -264,26 +267,42 @@ export default class RecipeParsingPlugin extends Plugin {
     return destination instanceof TFile ? destination : null;
   }
 
-  private async callLlmForImage(imageFile: TFile): Promise<string> {
+  private async callLlmForImages(
+    images: Array<{file: TFile; label: string}>
+  ): Promise<string> {
     const prompt = this.settings.bookExtractionPrompt.trim();
     if (!prompt) {
       throw new Error("Ingredients prompt is empty");
     }
 
-    const binary = await this.app.vault.readBinary(imageFile);
-    const base64 = this.toBase64(binary);
-    const mime = this.getMimeType(imageFile.extension);
-    const dataUrl = `data:${mime};base64,${base64}`;
+    const contentParts: Array<ImageTextPart | ImageUrlPart> = [
+      {
+        type: "text",
+        text:
+          "Extract information from all images. Return a combined response."
+      }
+    ];
+
+    for (const [index, image] of images.entries()) {
+      const binary = await this.app.vault.readBinary(image.file);
+      const base64 = this.toBase64(binary);
+      const mime = this.getMimeType(image.file.extension);
+      const dataUrl = `data:${mime};base64,${base64}`;
+      const label = image.label || image.file.name;
+
+      contentParts.push({
+        type: "text",
+        text: `Image ${index + 1}: ${label}`
+      });
+      contentParts.push({type: "image_url", image_url: {url: dataUrl}});
+    }
 
     const messages: ChatMessage[] = [
-      {role: "system", content: prompt},
       {
         role: "user",
-        content: [
-          {type: "text", text: "Recipe image for ingredient extraction."},
-          {type: "image_url", image_url: {url: dataUrl}}
-        ]
-      }
+        content: contentParts
+      },
+      {role: "system", content: prompt}
     ];
 
     return await this.callLlm(messages, this.settings.imageModel);
