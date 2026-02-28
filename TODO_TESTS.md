@@ -32,19 +32,19 @@
 - [x] Success notice after updating content.
 
 ## findImageLinks
-- [ ] Matches wiki embeds: `![[image.png]]`.
-- [ ] Matches wiki embeds with alias and/or heading: `![[image.png|alias]]`, `![[image.png#Section]]`.
-- [ ] Matches markdown images: `![alt](path.png)`.
-- [ ] Matches markdown images with title: `![alt](path.png "title")`.
-- [ ] Returns correct start indices for each match.
-- [ ] Does not include non-image links.
+- [x] Matches wiki embeds: `![[image.png]]`.
+- [x] Matches wiki embeds with alias and/or heading: `![[image.png|alias]]`, `![[image.png#Section]]`.
+- [x] Matches markdown images: `![alt](path.png)`.
+- [x] Matches markdown images with title: `![alt](path.png "title")`.
+- [x] Returns correct start indices for each match.
+- [x] Does not include non-image links.
 
 ## findLinkedRecipeFiles
-- [ ] Collects unique wiki links (dedup).
-- [ ] Ignores image embeds (preceded by `!`).
-- [ ] Resolves to existing markdown files only.
-- [ ] Ignores non-markdown files.
-- [ ] Handles links with alias/heading.
+- [x] Collects unique wiki links (dedup).
+- [x] Ignores image embeds (preceded by `!`).
+- [x] Resolves to existing markdown files only.
+- [x] Ignores non-markdown files.
+- [x] Handles links with alias/heading.
 
 ## stripImageEmbeds
 - [ ] Removes wiki image embeds.
@@ -81,13 +81,14 @@
 - [ ] Returns message content on success.
 
 ## getMimeType
-- [ ] Maps jpg/jpeg to image/jpeg.
-- [ ] Maps png to image/png.
-- [ ] Maps webp to image/webp.
-- [ ] Maps gif to image/gif.
-- [ ] Maps bmp to image/bmp.
-- [ ] Defaults to application/octet-stream for unknown extension.
-- [ ] Handles uppercase extensions.
+- [ ] Correctly maps file types
+  - [ ] Maps jpg/jpeg to image/jpeg.
+  - [ ] Maps png to image/png.
+  - [ ] Maps webp to image/webp.
+  - [ ] Maps gif to image/gif.
+  - [ ] Maps bmp to image/bmp.
+  - [ ] Defaults to application/octet-stream for unknown extension.
+  - [ ] Handles uppercase extensions.
 
 ## toBase64
 - [ ] Produces expected base64 output for small ArrayBuffer.
