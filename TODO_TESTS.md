@@ -62,46 +62,46 @@
 - [x] Returns null when no destination found.
 
 ## callLlmForImage
-- [ ] Throws when book extraction prompt is empty/whitespace.
-- [ ] Reads binary content from image file.
-- [ ] Uses correct mime types for jpg/jpeg/png/webp/gif/bmp and default for unknown.
-- [ ] Builds data URL with base64 payload.
-- [ ] Sends messages with system prompt + user image payload.
-- [ ] Uses `imageModel` for the call.
+- [x] Throws when book extraction prompt is empty/whitespace.
+- [x] Reads binary content from image file.
+- [x] Uses correct mime types for jpg/jpeg/png/webp/gif/bmp and default for unknown.
+- [x] Builds data URL with base64 payload.
+- [x] Sends messages with system prompt + user image payload.
+- [x] Uses `imageModel` for the call.
 
 ## callLlm
-- [ ] Throws when endpoint is empty/whitespace.
-- [ ] Throws when model is empty/whitespace.
-- [ ] Sets JSON content-type header.
-- [ ] Adds Authorization header when api key is non-empty (trimmed).
-- [ ] Does not add Authorization header when api key is empty/whitespace.
-- [ ] Posts to configured endpoint with model/messages/temperature.
-- [ ] Throws on non-200 response with status included.
-- [ ] Throws when response content shape is missing or not a string.
-- [ ] Returns message content on success.
+- [x] Throws when endpoint is empty/whitespace.
+- [x] Throws when model is empty/whitespace.
+- [x] Sets JSON content-type header.
+- [x] Adds Authorization header when api key is non-empty (trimmed).
+- [x] Does not add Authorization header when api key is empty/whitespace.
+- [x] Posts to configured endpoint with model/messages/temperature.
+- [x] Throws on non-200 response with status included.
+- [x] Throws when response content shape is missing or not a string.
+- [x] Returns message content on success.
 
 ## getMimeType
-- [ ] Correctly maps file types
-  - [ ] Maps jpg/jpeg to image/jpeg.
-  - [ ] Maps png to image/png.
-  - [ ] Maps webp to image/webp.
-  - [ ] Maps gif to image/gif.
-  - [ ] Maps bmp to image/bmp.
-  - [ ] Defaults to application/octet-stream for unknown extension.
-  - [ ] Handles uppercase extensions.
+- [x] Correctly maps file types
+  - [x] Maps jpg/jpeg to image/jpeg.
+  - [x] Maps png to image/png.
+  - [x] Maps webp to image/webp.
+  - [x] Maps gif to image/gif.
+  - [x] Maps bmp to image/bmp.
+  - [x] Defaults to application/octet-stream for unknown extension.
+  - [x] Handles uppercase extensions.
 
 ## toBase64
-- [ ] Produces expected base64 output for small ArrayBuffer.
-- [ ] Handles large buffers by chunking (multiple iterations).
-- [ ] Output matches standard base64 of byte array.
+- [x] Produces expected base64 output for small ArrayBuffer.
+- [x] Handles large buffers by chunking (multiple iterations).
+- [x] Output matches standard base64 of byte array.
 
 ## Settings UI (RecipeParsingSettingTab)
-- [ ] Text inputs trim values before saving.
-- [ ] Image model and text model fall back to default when empty.
-- [ ] Text area fields persist raw value (no trim).
-- [ ] Save called after each setting change.
+- [x] Text inputs trim values before saving.
+- [x] Image model and text model fall back to default when empty.
+- [x] Text area fields persist raw value (no trim).
+- [x] Save called after each setting change.
 
 ## Notices and Error Handling
-- [ ] Error messages include the link path for image extraction failures.
-- [ ] LLM errors propagate to notices with message text.
-- [ ] No extra notices are shown on early returns.
+- [x] Error messages include the link path for image extraction failures.
+- [x] LLM errors propagate to notices with message text.
+- [x] No extra notices are shown on early returns.

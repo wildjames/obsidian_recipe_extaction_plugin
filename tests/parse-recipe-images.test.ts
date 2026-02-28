@@ -169,4 +169,22 @@ describe("parse recipe images command", () => {
     expect(plugin.app.vault.modify).not.toHaveBeenCalled();
     expect(notices).toEqual(["one.png: boom"]);
   });
+
+  it("propagates LLM errors into notices with link path", async () => {
+    const activeFile = new Obsidian.TFile("recipes.md");
+    const content = "Intro\n![[image.png]]";
+
+    plugin.app.workspace.getActiveFile = vi.fn().mockReturnValue(activeFile);
+    plugin.app.vault.read = vi.fn().mockResolvedValue(content);
+    plugin.app.vault.modify = vi.fn().mockResolvedValue();
+    plugin.app.metadataCache.getFirstLinkpathDest = vi.fn(() => new Obsidian.TFile("image.png"));
+
+    vi.spyOn(plugin as unknown as {callLlmForImage: (file: Obsidian.TFile) => Promise<string>}, "callLlmForImage")
+      .mockRejectedValue(new Error("LLM is down"));
+
+    await runExtract();
+
+    expect(plugin.app.vault.modify).not.toHaveBeenCalled();
+    expect(notices).toEqual(["image.png: LLM is down"]);
+  });
 });
