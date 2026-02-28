@@ -4,6 +4,8 @@ We want two plugin commands, one will take all images in a given markdown file a
 
 The other one should take a filled-in meal plan template and look at each linked recipe and feed all of those files into an llm and ask it to construct a shopping list in the format defined by the template file.
 
+A third one should take a hyperlink to a webpage with a recipe on it, and extract that recipe to markdown. The original link should still be in there though
+
 ## Development
 
 By default, dependabot creates patch releases, and devs create minor releases. If you want to create a major release, prepend your PR with the string `Major: `.
