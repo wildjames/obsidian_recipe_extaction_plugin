@@ -21,10 +21,10 @@ describe("parse recipe images command", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     notices = [];
-    vi.spyOn(Obsidian, "Notice").mockImplementation((message: string) => {
+    vi.spyOn(Obsidian, "Notice").mockImplementation(function(message: string) {
       notices.push(message);
       return {} as Obsidian.Notice;
-    });
+    } as unknown as typeof Obsidian.Notice);
 
     plugin = createPlugin();
   });
