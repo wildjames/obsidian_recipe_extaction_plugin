@@ -37,6 +37,17 @@ export default class RecipeParsingPlugin extends Plugin {
         await this.buildShoppingListFromMealPlan();
       }
     });
+
+    this.addCommand({
+      id: "reset-prompts-to-defaults",
+      name: "Reset prompts to defaults",
+      callback: async () => {
+        this.settings.bookExtractionPrompt = DEFAULT_SETTINGS.bookExtractionPrompt;
+        this.settings.shoppingListPrompt = DEFAULT_SETTINGS.shoppingListPrompt;
+        await this.saveSettings();
+        new Notice("Prompts reset to defaults.");
+      }
+    });
   }
 
   async loadSettings(): Promise<void> {
@@ -157,22 +168,30 @@ export default class RecipeParsingPlugin extends Plugin {
       return;
     }
 
-    const templateSection = planContent.slice(sectionStart, sectionEnd).trim();
-    const llmResult = await this.callLlm([
-      // Single prompt for better speed - this task is simple and doesn't require much reasoning.
-      {
-        role: "user",
-        content:
-          `Meal plan:\n${planContent.trim()}\n\n` +
-          `Recipes (omit any images already removed):\n${recipeContents.join("\n\n")}` +
-          `Meal plan shopping list template:\n${templateSection}\n\n`
-      },
-      {role: "system", content: prompt}
-    ], this.settings.textModel);
+    const mealPlanWithoutShoppingList = planContent.slice(0, sectionStart).trim();
+    const shoppingListTemplate = this.buildShoppingListTemplate(
+      planContent.slice(sectionStart, sectionEnd).trim(),
+      sectionLevel
+    );
+    new Notice("Generating shopping list from linked recipes... This may take a moment.");
+    const llmResult = await this.callLlm(
+      [
+        // Single prompt for better speed - this task is simple and doesn't require much reasoning.
+        {
+          role: "user",
+          content:
+            `Meal plan:\n${mealPlanWithoutShoppingList}\n\n` +
+            `Recipes (omit any images already removed):\n${recipeContents.join("\n\n")}\n\n` +
+            `Meal plan shopping list headers:\n${shoppingListTemplate}\n\n`
+        },
+        {role: "system", content: prompt}
+      ],
+      this.settings.textModel
+    );
 
     const updatedSection = llmResult.trim();
     if (!/^#\s*Need to buy/i.test(updatedSection)) {
-      new Notice("LLM response did not include a '# Need to buy' section.");
+      new Notice("LLM response did not include a '# Need to buy' section.\nYou might want to try again or adjust the shopping list prompt.");
       return;
     }
 
@@ -252,6 +271,41 @@ export default class RecipeParsingPlugin extends Plugin {
     );
 
     return withoutHtmlImages;
+  }
+
+  private buildShoppingListTemplate(sectionContent: string, sectionLevel: number): string {
+    const lines = sectionContent.split(/\r?\n/);
+    const output: string[] = [];
+    let hasSubheaders = false;
+
+    for (const line of lines) {
+      const headerMatch = /^(#{1,6})\s+/.exec(line);
+      if (headerMatch) {
+        const level = headerMatch[1].length;
+        if (level === sectionLevel && output.length === 0) {
+          output.push(line.trimEnd());
+          continue;
+        }
+
+        if (level > sectionLevel) {
+          hasSubheaders = true;
+          if (output.length > 0 && output[output.length - 1] !== "") {
+            output.push("");
+          }
+          output.push(line.trimEnd());
+          output.push("- [ ] ");
+        }
+      }
+    }
+
+    if (!hasSubheaders) {
+      if (output.length > 0 && output[output.length - 1] !== "") {
+        output.push("");
+      }
+      output.push("- [ ] ");
+    }
+
+    return output.join("\n").trimEnd();
   }
 
   private resolveImageFile(sourceFile: TFile, linkPath: string): TFile | null {
