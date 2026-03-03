@@ -126,7 +126,7 @@ describe("build shopping list command", () => {
     await runBuild();
 
     const mealPlanSection = "# Meal plan\n\n[[alpha]]";
-    const templateSection = "# Need to buy\n- [ ] ";
+    const templateSection = "# Need to buy\n\n- [ ]";
 
     expect(Array.isArray(capturedMessages)).toBe(true);
     const messages = capturedMessages as Array<{role: string; content: string}>;
