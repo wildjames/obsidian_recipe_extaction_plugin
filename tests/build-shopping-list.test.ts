@@ -99,7 +99,7 @@ describe("build shopping list command", () => {
     expect(notices).toEqual(["Shopping list prompt is empty."]);
   });
 
-  it("strips image embeds and builds prompt with template and cleaned recipes", async () => {
+  it("strips image embeds and builds prompt with headers-only template and cleaned recipes", async () => {
     const activeFile = new Obsidian.TFile("plan.md");
     const recipeFile = new Obsidian.TFile("recipes/alpha.md");
     const planContent = "# Meal plan\n\n[[alpha]]\n\n# Need to buy\n- [ ] produce\n- [ ] pantry\n";
@@ -125,19 +125,20 @@ describe("build shopping list command", () => {
 
     await runBuild();
 
-    const templateSection = planContent.match(/(^#\s*Need to buy[\s\S]*)$/im)?.[0].trim();
+    const mealPlanSection = "# Meal plan\n\n[[alpha]]";
+    const templateSection = "# Need to buy\n\n- [ ]";
 
     expect(Array.isArray(capturedMessages)).toBe(true);
     const messages = capturedMessages as Array<{role: string; content: string}>;
     expect(messages).toHaveLength(2);
     expect(messages[0].role).toBe("user");
     expect(messages[0].content).toContain("Meal plan:");
-    expect(messages[0].content).toContain(planContent.trim());
+    expect(messages[0].content).toContain(mealPlanSection);
     expect(messages[0].content).toContain("Recipes (omit any images already removed):");
     expect(messages[0].content).toContain(`---\nFile: ${recipeFile.path}`);
     expect(messages[0].content).toContain("Keep this.");
-    expect(messages[0].content).toContain("Meal plan shopping list template:");
-    expect(messages[0].content).toContain(templateSection ?? "");
+    expect(messages[0].content).toContain("Meal plan shopping list headers:");
+    expect(messages[0].content).toContain(templateSection);
     expect(messages[0].content).not.toMatch(/!\[\[/);
     expect(messages[0].content).not.toMatch(/!\[[^\]]*\]\([^\)]*\)/);
     expect(messages[0].content).not.toMatch(/<img[^>]*>/i);
@@ -168,7 +169,10 @@ describe("build shopping list command", () => {
     await runBuild();
 
     expect(plugin.app.vault.modify).not.toHaveBeenCalled();
-    expect(notices).toEqual(["LLM response did not include a '# Need to buy' section."]);
+    expect(notices).toEqual([
+      "Generating shopping list from linked recipes... This may take a moment.",
+      "LLM response did not include a '# Need to buy' section.\nYou might want to try again or adjust the shopping list prompt."
+    ]);
   });
 
   it("replaces only the Need to buy section and keeps the rest intact", async () => {
