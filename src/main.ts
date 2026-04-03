@@ -106,6 +106,12 @@ export default class RecipeParsingPlugin extends Plugin {
         updatedContent.slice(0, firstMatch.start) +
         insertText +
         updatedContent.slice(firstMatch.start);
+
+      if (this.settings.deleteImagesAfterProcessing) {
+        for (const image of resolvedImages) {
+          await this.app.vault.delete(image.file);
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       new Notice(message);
@@ -506,6 +512,18 @@ class RecipeParsingSettingTab extends PluginSettingTab {
         this.plugin.settings.shoppingListPrompt = value;
       }
     });
+
+    new Setting(containerEl)
+      .setName("Delete images after processing")
+      .setDesc("Delete recipe image attachments from the vault after they have been processed.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.deleteImagesAfterProcessing)
+          .onChange(async (value) => {
+            this.plugin.settings.deleteImagesAfterProcessing = value;
+            await this.plugin.saveSettings();
+          })
+      );
   }
 
   private addTextSetting(

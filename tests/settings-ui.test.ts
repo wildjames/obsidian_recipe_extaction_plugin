@@ -11,6 +11,7 @@ type TestPlugin = RecipeParsingPlugin & {
 };
 
 type TextChange = (value: string) => void | Promise<void>;
+type ToggleChange = (value: boolean) => void | Promise<void>;
 
 const createPlugin = (): TestPlugin => {
   const app = new Obsidian.App();
@@ -24,6 +25,7 @@ describe("RecipeParsingSettingTab", () => {
   let tab: Obsidian.PluginSettingTab | null;
   let textChanges: TextChange[];
   let textAreaChanges: TextChange[];
+  let toggleChanges: ToggleChange[];
 
   beforeEach(async () => {
     vi.restoreAllMocks();
@@ -31,6 +33,7 @@ describe("RecipeParsingSettingTab", () => {
     tab = null;
     textChanges = [];
     textAreaChanges = [];
+    toggleChanges = [];
 
     vi.spyOn(plugin, "loadData").mockResolvedValue(null);
     vi.spyOn(plugin, "saveSettings").mockResolvedValue();
@@ -56,6 +59,18 @@ describe("RecipeParsingSettingTab", () => {
         setValue: vi.fn().mockReturnThis(),
         onChange: (cb: TextChange) => {
           textAreaChanges.push(cb);
+          return control;
+        }
+      };
+      callback(control as unknown as {setValue: () => void; onChange: () => void});
+      return this;
+    });
+
+    vi.spyOn(Obsidian.Setting.prototype, "addToggle").mockImplementation(function (callback) {
+      const control = {
+        setValue: vi.fn().mockReturnThis(),
+        onChange: (cb: ToggleChange) => {
+          toggleChanges.push(cb);
           return control;
         }
       };
@@ -95,6 +110,20 @@ describe("RecipeParsingSettingTab", () => {
 
     expect(plugin.settings.bookExtractionPrompt).toBe("  keep spaces  ");
     expect(plugin.settings.shoppingListPrompt).toBe("  another prompt  ");
+    expect(plugin.saveSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it("toggles deleteImagesAfterProcessing and saves", async () => {
+    expect(toggleChanges).toHaveLength(1);
+
+    await toggleChanges[0](true);
+
+    expect(plugin.settings.deleteImagesAfterProcessing).toBe(true);
+    expect(plugin.saveSettings).toHaveBeenCalledTimes(1);
+
+    await toggleChanges[0](false);
+
+    expect(plugin.settings.deleteImagesAfterProcessing).toBe(false);
     expect(plugin.saveSettings).toHaveBeenCalledTimes(2);
   });
 });
