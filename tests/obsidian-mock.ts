@@ -71,6 +71,10 @@ export class Setting {
   addButton(_callback: (button: {setButtonText: (value: string) => void; onClick: (cb: () => void) => void}) => void): this {
     return this;
   }
+
+  addToggle(_callback: (toggle: {setValue: (value: boolean) => void; onChange: (cb: (value: boolean) => void) => void}) => void): this {
+    return this;
+  }
 }
 
 export class Notice {

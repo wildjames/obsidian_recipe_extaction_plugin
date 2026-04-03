@@ -35,7 +35,8 @@ describe("settings", () => {
       imageModel: "image-model",
       textModel: "text-model",
       bookExtractionPrompt: "book prompt",
-      shoppingListPrompt: "shopping prompt"
+      shoppingListPrompt: "shopping prompt",
+      deleteImagesAfterProcessing: true
     };
 
     vi.spyOn(plugin, "loadData").mockResolvedValue(saved);
