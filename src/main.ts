@@ -316,8 +316,8 @@ export default class RecipeParsingPlugin extends Plugin {
 
   private stripHtmlToText(html: string): string {
     // Remove script and style blocks
-    let text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
-    text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+    let text = html.replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, "");
+    text = text.replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, "");
     // Replace block-level tags with newlines
     text = text.replace(/<\/(p|div|br|h[1-6]|li|tr|section|article)\s*>/gi, "\n");
     text = text.replace(/<br\s*\/?>/gi, "\n");
