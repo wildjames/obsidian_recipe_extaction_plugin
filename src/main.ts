@@ -289,8 +289,8 @@ export default class RecipeParsingPlugin extends Plugin {
       matches.push({url: match[1], fullMatch: match[0], start: match.index});
     }
 
-    // Bare URLs not already captured inside markdown link syntax: https://...
-    const bareUrlRegex = /(?<!\]\()(?<!\()\bhttps?:\/\/(?:[^\s()>\]]+|\([^\s()]*\))*/g;
+    // Bare URLs: https://... (alreadyCaptured check below skips markdown-link URLs)
+    const bareUrlRegex = /\bhttps?:\/\/(?:[^\s()>\]]+|\([^\s()]*\))*/g;
     for (const match of content.matchAll(bareUrlRegex)) {
       if (match.index === undefined) continue;
       // Skip if this URL is already part of a markdown link

@@ -101,6 +101,14 @@ describe("findUrlLinks", () => {
     expect(matches).toHaveLength(1);
     expect(matches[0].url).toBe("https://example.com/a_(b)/c_(d)");
   });
+
+  it("matches bare URLs wrapped in plain parentheses", () => {
+    const content = "Check this out (https://example.com/recipe) for ideas";
+    const matches = plugin.findUrlLinks(content);
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0].url).toBe("https://example.com/recipe");
+  });
 });
 
 describe("parse recipe from URL command", () => {
