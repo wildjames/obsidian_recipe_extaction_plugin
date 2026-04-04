@@ -77,6 +77,30 @@ describe("findUrlLinks", () => {
       expect.arrayContaining(["https://a.com/one", "https://b.com/two"])
     );
   });
+
+  it("handles markdown links with parentheses in the URL", () => {
+    const content = "[Wikipedia](https://en.wikipedia.org/wiki/Foo_(bar))";
+    const matches = plugin.findUrlLinks(content);
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0].url).toBe("https://en.wikipedia.org/wiki/Foo_(bar)");
+  });
+
+  it("handles bare URLs with parentheses", () => {
+    const content = "See https://en.wikipedia.org/wiki/Foo_(bar) for details";
+    const matches = plugin.findUrlLinks(content);
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0].url).toBe("https://en.wikipedia.org/wiki/Foo_(bar)");
+  });
+
+  it("handles markdown links with multiple parenthesized groups in URL", () => {
+    const content = "[link](https://example.com/a_(b)/c_(d))";
+    const matches = plugin.findUrlLinks(content);
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0].url).toBe("https://example.com/a_(b)/c_(d)");
+  });
 });
 
 describe("parse recipe from URL command", () => {

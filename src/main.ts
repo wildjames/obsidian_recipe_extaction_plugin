@@ -279,18 +279,18 @@ export default class RecipeParsingPlugin extends Plugin {
     new Notice("Recipe information extracted from URLs.");
   }
 
-  findUrlLinks(content: string): UrlLinkMatch[] {
+  private findUrlLinks(content: string): UrlLinkMatch[] {
     const matches: UrlLinkMatch[] = [];
 
-    // Markdown links: [text](https://...)
-    const markdownLinkRegex = /(?<!!)\[[^\]]*\]\((https?:\/\/[^\)\s]+)\)/g;
+    // Markdown links: [text](https://...) — allows one level of balanced parentheses in URLs
+    const markdownLinkRegex = /(?<!!)\[[^\]]*\]\((https?:\/\/(?:[^\s()]+|\([^\s()]*\))*)\)/g;
     for (const match of content.matchAll(markdownLinkRegex)) {
       if (match.index === undefined) continue;
       matches.push({url: match[1], fullMatch: match[0], start: match.index});
     }
 
     // Bare URLs not already captured inside markdown link syntax: https://...
-    const bareUrlRegex = /(?<!\]\()(?<!\()\bhttps?:\/\/[^\s)>\]]+/g;
+    const bareUrlRegex = /(?<!\]\()(?<!\()\bhttps?:\/\/(?:[^\s()>\]]+|\([^\s()]*\))*/g;
     for (const match of content.matchAll(bareUrlRegex)) {
       if (match.index === undefined) continue;
       // Skip if this URL is already part of a markdown link
