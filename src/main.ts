@@ -1,4 +1,5 @@
 import {App, Notice, Plugin, PluginSettingTab, Setting, TFile, requestUrl} from "obsidian";
+import {extractFromHtml} from "@extractus/article-extractor";
 import {DEFAULT_SETTINGS, RecipeParsingSettings} from "./settings";
 
 type ImageTextPart = {type: "text"; text: string};
@@ -11,6 +12,12 @@ type ChatMessage = {
 
 type ImageLinkMatch = {
   linkPath: string;
+  start: number;
+};
+
+type UrlLinkMatch = {
+  url: string;
+  fullMatch: string;
   start: number;
 };
 
@@ -39,10 +46,19 @@ export default class RecipeParsingPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "parse-recipe-from-url",
+      name: "Parse recipe from URL",
+      callback: async () => {
+        await this.extractRecipeFromUrlInActiveFile();
+      }
+    });
+
+    this.addCommand({
       id: "reset-prompts-to-defaults",
       name: "Reset prompts to defaults",
       callback: async () => {
         this.settings.bookExtractionPrompt = DEFAULT_SETTINGS.bookExtractionPrompt;
+        this.settings.urlExtractionPrompt = DEFAULT_SETTINGS.urlExtractionPrompt;
         this.settings.shoppingListPrompt = DEFAULT_SETTINGS.shoppingListPrompt;
         await this.saveSettings();
         new Notice("Prompts reset to defaults.");
@@ -209,6 +225,115 @@ export default class RecipeParsingPlugin extends Plugin {
 
     await this.app.vault.modify(activeFile, updatedContent);
     new Notice("Shopping list updated from linked recipes.");
+  }
+
+  private async extractRecipeFromUrlInActiveFile(): Promise<void> {
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile || activeFile.extension !== "md") {
+      new Notice("Open a markdown file to extract a recipe from a URL.");
+      return;
+    }
+
+    const noteContent = await this.app.vault.read(activeFile);
+    const urlMatches = this.findUrlLinks(noteContent);
+
+    if (urlMatches.length === 0) {
+      new Notice("No URLs found in this file.");
+      return;
+    }
+
+    let updatedContent = noteContent;
+    let offset = 0;
+
+    try {
+      const sorted = [...urlMatches].sort((a, b) => a.start - b.start);
+
+      for (const match of sorted) {
+        new Notice(`Fetching recipe from ${match.url}...`);
+        const pageContent = await this.fetchUrlContent(match.url);
+        const llmResult = await this.callLlmForUrl(match.url, pageContent);
+
+        if (!llmResult.trim()) {
+          new Notice(`LLM returned empty response for ${match.url}`);
+          continue;
+        }
+
+        const insertText = `${llmResult.trim()}\n\n`;
+        const insertPos = match.start + offset;
+        updatedContent =
+          updatedContent.slice(0, insertPos) +
+          insertText +
+          updatedContent.slice(insertPos);
+        offset += insertText.length;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      new Notice(message);
+      return;
+    }
+
+    if (updatedContent !== noteContent) {
+      await this.app.vault.modify(activeFile, updatedContent);
+    }
+
+    new Notice("Recipe information extracted from URLs.");
+  }
+
+  private findUrlLinks(content: string): UrlLinkMatch[] {
+    const matches: UrlLinkMatch[] = [];
+
+    // Markdown links: [text](https://...) — allows one level of balanced parentheses in URLs
+    const markdownLinkRegex = /(?<!!)\[[^\]]*\]\((https?:\/\/(?:[^\s()]+|\([^\s()]*\))*)\)/g;
+    for (const match of content.matchAll(markdownLinkRegex)) {
+      if (match.index === undefined) continue;
+      matches.push({url: match[1], fullMatch: match[0], start: match.index});
+    }
+
+    // Bare URLs: https://... (alreadyCaptured check below skips markdown-link URLs)
+    const bareUrlRegex = /\bhttps?:\/\/(?:[^\s()>\]]+|\([^\s()]*\))*/g;
+    for (const match of content.matchAll(bareUrlRegex)) {
+      if (match.index === undefined) continue;
+      // Skip if this URL is already part of a markdown link
+      const alreadyCaptured = matches.some(
+        (m) => match.index! >= m.start && match.index! < m.start + m.fullMatch.length
+      );
+      if (alreadyCaptured) continue;
+      // Skip image URLs (common image extensions)
+      if (/\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i.test(match[0])) continue;
+      matches.push({url: match[0], fullMatch: match[0], start: match.index});
+    }
+
+    return matches;
+  }
+
+  private async fetchUrlContent(url: string): Promise<string> {
+    const response = await requestUrl({url, method: "GET"});
+    if (response.status !== 200) {
+      throw new Error(`Failed to fetch URL (${response.status}): ${url}`);
+    }
+    const html = response.text;
+    const article = await extractFromHtml(html, url);
+    if (!article || !article.content) {
+      throw new Error(`Could not extract article content from: ${url}`);
+    }
+    return article.content;
+  }
+
+  private async callLlmForUrl(url: string, pageContent: string): Promise<string> {
+    const prompt = this.settings.urlExtractionPrompt.trim();
+    if (!prompt) {
+      throw new Error("URL extraction prompt is empty");
+    }
+
+    const messages: ChatMessage[] = [
+      {
+        role: "user",
+        content: `Extract the recipe from the following webpage.\n\nURL: ${url}\n\nWebpage content:\n${pageContent}`
+      },
+      {role: "system", content: prompt}
+    ];
+
+    return await this.callLlm(messages, this.settings.textModel);
   }
 
   private findImageLinks(content: string): ImageLinkMatch[] {
@@ -501,6 +626,15 @@ class RecipeParsingSettingTab extends PluginSettingTab {
       value: this.plugin.settings.bookExtractionPrompt,
       onChange: (value) => {
         this.plugin.settings.bookExtractionPrompt = value;
+      }
+    });
+
+    this.addTextAreaSetting(containerEl, {
+      name: "URL extraction prompt",
+      desc: "Prompt used when extracting a recipe from a URL.",
+      value: this.plugin.settings.urlExtractionPrompt,
+      onChange: (value) => {
+        this.plugin.settings.urlExtractionPrompt = value;
       }
     });
 

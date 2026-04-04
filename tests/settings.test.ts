@@ -35,6 +35,7 @@ describe("settings", () => {
       imageModel: "image-model",
       textModel: "text-model",
       bookExtractionPrompt: "book prompt",
+      urlExtractionPrompt: "url prompt",
       shoppingListPrompt: "shopping prompt",
       deleteImagesAfterProcessing: true
     };
