@@ -7,7 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
-      obsidian: path.resolve(__dirname, "tests/obsidian-mock.ts")
+      obsidian: path.resolve(__dirname, "tests/obsidian-mock.ts"),
+      "@extractus/article-extractor": path.resolve(__dirname, "tests/article-extractor-mock.ts")
     }
   },
   esbuild: {

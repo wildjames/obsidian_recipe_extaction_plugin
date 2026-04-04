@@ -1,4 +1,5 @@
 import {App, Notice, Plugin, PluginSettingTab, Setting, TFile, requestUrl} from "obsidian";
+import {extractFromHtml} from "@extractus/article-extractor";
 import {DEFAULT_SETTINGS, RecipeParsingSettings} from "./settings";
 
 type ImageTextPart = {type: "text"; text: string};
@@ -311,29 +312,11 @@ export default class RecipeParsingPlugin extends Plugin {
       throw new Error(`Failed to fetch URL (${response.status}): ${url}`);
     }
     const html = response.text;
-    return this.stripHtmlToText(html);
-  }
-
-  private stripHtmlToText(html: string): string {
-    // Remove script and style blocks
-    let text = html.replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, "");
-    text = text.replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, "");
-    // Replace block-level tags with newlines
-    text = text.replace(/<\/(p|div|br|h[1-6]|li|tr|section|article)\s*>/gi, "\n");
-    text = text.replace(/<br\s*\/?>/gi, "\n");
-    // Remove remaining HTML tags
-    text = text.replace(/<[^>]+>/g, "");
-    // Decode common HTML entities
-    text = text.replace(/&amp;/g, "&");
-    text = text.replace(/&lt;/g, "<");
-    text = text.replace(/&gt;/g, ">");
-    text = text.replace(/&quot;/g, "\"");
-    text = text.replace(/&#39;/g, "'");
-    text = text.replace(/&nbsp;/g, " ");
-    // Collapse whitespace
-    text = text.replace(/[ \t]+/g, " ");
-    text = text.replace(/\n{3,}/g, "\n\n");
-    return text.trim();
+    const article = await extractFromHtml(html, url);
+    if (!article || !article.content) {
+      throw new Error(`Could not extract article content from: ${url}`);
+    }
+    return article.content;
   }
 
   private async callLlmForUrl(url: string, pageContent: string): Promise<string> {
