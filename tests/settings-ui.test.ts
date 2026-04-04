@@ -103,14 +103,16 @@ describe("RecipeParsingSettingTab", () => {
   });
 
   it("persists raw values for text areas and saves after each change", async () => {
-    expect(textAreaChanges).toHaveLength(2);
+    expect(textAreaChanges).toHaveLength(3);
 
     await textAreaChanges[0]("  keep spaces  ");
-    await textAreaChanges[1]("  another prompt  ");
+    await textAreaChanges[1]("  url prompt  ");
+    await textAreaChanges[2]("  another prompt  ");
 
     expect(plugin.settings.bookExtractionPrompt).toBe("  keep spaces  ");
+    expect(plugin.settings.urlExtractionPrompt).toBe("  url prompt  ");
     expect(plugin.settings.shoppingListPrompt).toBe("  another prompt  ");
-    expect(plugin.saveSettings).toHaveBeenCalledTimes(2);
+    expect(plugin.saveSettings).toHaveBeenCalledTimes(3);
   });
 
   it("toggles deleteImagesAfterProcessing and saves", async () => {
