@@ -17,7 +17,7 @@
     "esbuild": "^0.28.0",
     "obsidian": "^1.13.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.8"
   },
   "dependencies": {
     "@extractus/article-extractor": "^8.1.0",
